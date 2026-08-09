@@ -32,6 +32,7 @@ yarn-error.*
 
 # editor/tooling
 .claude/
+CLAUDE.md
 
 # local env files
 .env*.local
