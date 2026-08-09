@@ -1,40 +1,11 @@
-export type Grade = 'excellent' | 'good' | 'poor' | 'bad';
+import { ALL_FLAG_TAGS, FlagTag, Grade, Product } from './types';
 
-export interface Product {
-  barcode: string;
-  name: string;
-  brand: string;
-  score: number;
-  grade: Grade;
-  breakdown: {
-    nutrition: number;
-    additives: number;
-    organic: number;
-  };
-  pros: string[];
-  cons: string[];
-}
-
-export const GRADE_COLOR: Record<Grade, string> = {
-  excellent: '#1E8F4E',
-  good: '#8BC34A',
-  poor: '#FF9800',
-  bad: '#E53935',
-};
-
-export const GRADE_LABEL: Record<Grade, string> = {
-  excellent: 'Excellent',
-  good: 'Good',
-  poor: 'Poor',
-  bad: 'Bad',
-};
-
-const ADJECTIVES = [
+export const ADJECTIVES = [
   'Crunchy', 'Zesty', 'Golden', 'Classic', 'Smoky', 'Tangy',
   'Wholesome', 'Rich', 'Light', 'Toasted', 'Creamy', 'Spiced',
 ];
 
-const NOUNS = [
+export const NOUNS = [
   'Granola Bar', 'Tomato Sauce', 'Potato Chips', 'Yogurt Cup', 'Cereal Bowl',
   'Fruit Snack', 'Veggie Wrap', 'Trail Mix', 'Soda', 'Protein Bar',
   'Cookie Pack', 'Soup Can', 'Peanut Spread', 'Granola Cluster', 'Juice Box',
@@ -54,7 +25,7 @@ const NUTRITION_CONS = [
 const ADDITIVE_PROS = ['No risky additives detected', 'Minimal processing'];
 const ADDITIVE_CONS = ['Contains additives with moderate risk', 'Contains several preservatives'];
 
-function hashBarcode(barcode: string): number {
+export function hashBarcode(barcode: string): number {
   let hash = 0;
   for (let i = 0; i < barcode.length; i++) {
     hash = (Math.imul(31, hash) + barcode.charCodeAt(i)) >>> 0;
@@ -81,8 +52,16 @@ function scoreToGrade(score: number): Grade {
   return 'bad';
 }
 
-export function generateProduct(barcode: string): Product {
-  const rng = makeRng(hashBarcode(barcode));
+/** Zero-padded numeric string so catalog-sourced products still display like a barcode. */
+export function pseudoBarcode(key: string): string {
+  return String(hashBarcode(key)).padStart(12, '0').slice(0, 12);
+}
+
+export function generateProduct(
+  key: string,
+  override?: { name: string; category: string },
+): Product {
+  const rng = makeRng(hashBarcode(key));
 
   const nutrition = Math.round(rng() * 100);
   const additives = Math.round(rng() * 100);
@@ -102,14 +81,21 @@ export function generateProduct(barcode: string): Product {
 
   if (organic >= 60) pros.push('Made with organic ingredients');
 
+  const tags: FlagTag[] = ALL_FLAG_TAGS.filter(() => rng() < 0.3);
+
+  const name = override ? override.name : `${pick(rng, ADJECTIVES)} ${pick(rng, NOUNS)}`;
+  const category = override ? override.category : name.split(' ').slice(1).join(' ');
+
   return {
-    barcode,
-    name: `${pick(rng, ADJECTIVES)} ${pick(rng, NOUNS)}`,
+    barcode: override ? pseudoBarcode(key) : key,
+    name,
     brand: pick(rng, BRANDS),
+    category,
     score,
     grade,
     breakdown: { nutrition, additives, organic },
     pros,
     cons,
+    tags,
   };
 }

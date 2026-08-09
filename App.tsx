@@ -1,31 +1,36 @@
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { generateProduct, Product } from './src/productGenerator';
-import ResultScreen from './src/ResultScreen';
-import ScannerScreen from './src/ScannerScreen';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AppDataProvider, useAppData } from './src/context/AppDataContext';
+import RootNavigator from './src/navigation/RootNavigator';
 
-export default function App() {
-  const [product, setProduct] = useState<Product | null>(null);
+function AppShell() {
+  const { loaded } = useAppData();
 
-  const handleScanned = (barcode: string) => {
-    setProduct(generateProduct(barcode));
-  };
+  if (!loaded) {
+    return <View style={styles.loading} />;
+  }
 
   return (
-    <View style={styles.container}>
-      {product ? (
-        <ResultScreen product={product} onScanAgain={() => setProduct(null)} />
-      ) : (
-        <ScannerScreen onScanned={handleScanned} />
-      )}
-      <StatusBar style={product ? 'dark' : 'light'} />
-    </View>
+    <>
+      <RootNavigator />
+      <StatusBar style="auto" />
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppDataProvider>
+        <AppShell />
+      </AppDataProvider>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  loading: {
     flex: 1,
     backgroundColor: '#000',
   },

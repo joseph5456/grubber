@@ -27,7 +27,10 @@
         {
           "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan product barcodes."
         }
-      ]
+      ],
+      "expo-audio",
+      "expo-notifications",
+      "expo-asset"
     ]
   }
 }

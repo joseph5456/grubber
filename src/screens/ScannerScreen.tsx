@@ -1,19 +1,22 @@
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { RootStackParamList } from '../navigation/types';
+import { generateProduct } from '../productGenerator';
 
-type Props = {
-  onScanned: (barcode: string) => void;
-};
-
-export default function ScannerScreen({ onScanned }: Props) {
+export default function ScannerScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [permission, requestPermission] = useCameraPermissions();
   const [locked, setLocked] = useState(false);
 
   const handleScan = (result: { data: string }) => {
     if (locked) return;
     setLocked(true);
-    onScanned(result.data);
+    const product = generateProduct(result.data);
+    navigation.navigate('Result', { product, origin: 'scan' });
+    setTimeout(() => setLocked(false), 1000);
   };
 
   if (!permission) {
