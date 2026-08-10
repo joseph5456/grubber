@@ -9,7 +9,9 @@ export const BADGE_TIERS: BadgeTier[] = [
   { name: 'Bronze', icon: '🥉', threshold: 1 },
   { name: 'Silver', icon: '🥈', threshold: 3 },
   { name: 'Gold', icon: '🥇', threshold: 6 },
-  { name: 'Platinum', icon: '💎', threshold: 10 },
+  { name: 'Diamond', icon: '💎', threshold: 10 },
+  { name: 'Master', icon: '👑', threshold: 18 },
+  { name: 'Legend', icon: '🏆', threshold: 30 },
 ];
 
 export interface BadgeStatus {
