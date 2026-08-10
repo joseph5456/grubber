@@ -175,7 +175,7 @@ export default function ProfileScreen() {
               style={[styles.button, { backgroundColor: '#E53935', marginBottom: 8 }]}
               onPress={() => firePreview('bad')}
             >
-              <Text style={styles.buttonText}>Preview slop animation</Text>
+              <Text style={styles.buttonText}>Preview red flash</Text>
             </Pressable>
             <Pressable
               style={[styles.button, { backgroundColor: '#FFC107' }]}

@@ -32,13 +32,24 @@ export async function playScanFeedback(grade: Grade): Promise<void> {
   }
 
   try {
-    const feedbackType =
-      grade === 'excellent' || grade === 'good'
-        ? Haptics.NotificationFeedbackType.Success
-        : Haptics.NotificationFeedbackType.Warning;
-    await Haptics.notificationAsync(feedbackType);
+    if (grade === 'excellent' || grade === 'good') {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else if (grade === 'bad') {
+      await playRapidShake();
+    } else {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
   } catch {
     // Haptics aren't available on web.
+  }
+}
+
+/** A quick burst of impacts to read as a "shake" for a bad score. */
+async function playRapidShake(): Promise<void> {
+  for (let i = 0; i < 5; i++) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((resolve) => setTimeout(resolve, 90));
   }
 }
 

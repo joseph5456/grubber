@@ -73,45 +73,29 @@ function ConfettiBurst() {
   );
 }
 
-function SlopSplat() {
-  const drip = useRef(new Animated.Value(0)).current;
-  const shake = useRef(new Animated.Value(0)).current;
+function RedFlash() {
+  const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.sequence([
-      Animated.timing(shake, { toValue: 1, duration: 60, useNativeDriver: true }),
-      Animated.timing(shake, { toValue: -1, duration: 60, useNativeDriver: true }),
-      Animated.timing(shake, { toValue: 0, duration: 60, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0.5, duration: 70, easing: Easing.linear, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0.12, duration: 110, easing: Easing.linear, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0.45, duration: 90, easing: Easing.linear, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0, duration: 350, easing: Easing.out(Easing.quad), useNativeDriver: true }),
     ]).start();
-    Animated.timing(drip, {
-      toValue: 1,
-      duration: 900,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start();
   }, []);
 
-  const translateY = drip.interpolate({ inputRange: [0, 1], outputRange: [0, 24] });
-  const scaleY = drip.interpolate({ inputRange: [0, 1], outputRange: [1, 1.4] });
-  const translateXShake = shake.interpolate({ inputRange: [-1, 1], outputRange: [-6, 6] });
-
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Animated.Text
-        style={[
-          styles.slopEmoji,
-          { transform: [{ translateY }, { translateX: translateXShake }, { scaleY }] },
-        ]}
-      >
-        {'\u{1F4A7}'}
-      </Animated.Text>
-    </View>
+    <Animated.View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, styles.redFlash, { opacity }]}
+    />
   );
 }
 
 export default function RewardAnimation({ grade }: Props) {
   if (grade === 'excellent') return <ConfettiBurst />;
-  if (grade === 'bad') return <SlopSplat />;
+  if (grade === 'bad') return <RedFlash />;
   return null;
 }
 
@@ -122,11 +106,7 @@ const styles = StyleSheet.create({
     left: '50%',
     borderRadius: 2,
   },
-  slopEmoji: {
-    position: 'absolute',
-    top: '26%',
-    left: '50%',
-    marginLeft: -24,
-    fontSize: 48,
+  redFlash: {
+    backgroundColor: '#E53935',
   },
 });
