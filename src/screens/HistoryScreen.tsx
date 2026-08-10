@@ -30,7 +30,7 @@ export default function HistoryScreen() {
         return (
           <Animated.View style={{ transform: [{ translateX }] }}>
             <Pressable style={styles.deleteAction} onPress={() => deleteHistoryEntry(item.scannedAt)}>
-              <Text style={styles.deleteActionText}>Delete</Text>
+              <Text style={styles.deleteActionIcon}>🗑️</Text>
             </Pressable>
           </Animated.View>
         );
@@ -151,10 +151,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 10,
   },
-  deleteActionText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 13,
+  deleteActionIcon: {
+    fontSize: 22,
   },
   empty: {
     flex: 1,
