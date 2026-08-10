@@ -1,18 +1,44 @@
-import { useNavigation } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import { RootStackParamList } from '../navigation/types';
 import { generateProduct } from '../productGenerator';
 
+const FRAME_WIDTH = 260;
+const FRAME_HEIGHT = 160;
+
 export default function ScannerScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const isFocused = useIsFocused();
   const [permission, requestPermission] = useCameraPermissions();
   const [locked, setLocked] = useState(false);
+  const [layout, setLayout] = useState({ width: 0, height: 0 });
 
-  const handleScan = (result: { data: string }) => {
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setLayout({ width, height });
+  };
+
+  const isWithinFrame = (bounds: BarcodeScanningResult['bounds']): boolean => {
+    if (!layout.width || !layout.height) return true;
+    if (bounds.size.width === 0 && bounds.size.height === 0) return true;
+    const frameX = (layout.width - FRAME_WIDTH) / 2;
+    const frameY = (layout.height - FRAME_HEIGHT) / 2;
+    const centerX = bounds.origin.x + bounds.size.width / 2;
+    const centerY = bounds.origin.y + bounds.size.height / 2;
+    return (
+      centerX >= frameX &&
+      centerX <= frameX + FRAME_WIDTH &&
+      centerY >= frameY &&
+      centerY <= frameY + FRAME_HEIGHT
+    );
+  };
+
+  const handleScan = (result: BarcodeScanningResult) => {
     if (locked) return;
+    if (!isWithinFrame(result.bounds)) return;
     setLocked(true);
     const product = generateProduct(result.data);
     navigation.navigate('Result', { product, origin: 'scan' });
@@ -38,15 +64,17 @@ export default function ScannerScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <CameraView
-        style={StyleSheet.absoluteFill}
-        facing="back"
-        onBarcodeScanned={locked ? undefined : handleScan}
-        barcodeScannerSettings={{
-          barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'qr', 'code128'],
-        }}
-      />
+    <View style={styles.container} onLayout={onLayout}>
+      {isFocused && (
+        <CameraView
+          style={StyleSheet.absoluteFill}
+          facing="back"
+          onBarcodeScanned={locked ? undefined : handleScan}
+          barcodeScannerSettings={{
+            barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'qr', 'code128'],
+          }}
+        />
+      )}
       <View style={styles.overlay} pointerEvents="none">
         <View style={styles.frame} />
         <Text style={styles.hint}>Point your camera at a barcode</Text>
@@ -96,8 +124,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   frame: {
-    width: 260,
-    height: 160,
+    width: FRAME_WIDTH,
+    height: FRAME_HEIGHT,
     borderWidth: 3,
     borderColor: '#fff',
     borderRadius: 16,
