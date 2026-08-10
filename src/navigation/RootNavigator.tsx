@@ -36,6 +36,7 @@ function Tabs() {
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.subtext,
         tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border },
+        animation: 'fade',
       })}
     >
       <Tab.Screen name="History" component={HistoryScreen} />
