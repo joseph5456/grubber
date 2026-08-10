@@ -85,6 +85,24 @@ export default function ResultScreen({ route, navigation }: Props) {
           </View>
         )}
 
+        {alternative && (
+          <View style={[styles.section, { backgroundColor: colors.card }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Recommended alternative</Text>
+            <Text style={[styles.altHint, { color: colors.subtext }]}>
+              This scored low — here's a better-rated {product.category.toLowerCase()}.
+            </Text>
+            <Pressable style={styles.altRow} onPress={() => openAlternative(alternative)}>
+              <View style={[styles.altScore, { backgroundColor: GRADE_COLOR[alternative.grade] }]}>
+                <Text style={styles.altScoreText}>{alternative.score}</Text>
+              </View>
+              <View style={styles.altInfo}>
+                <Text style={[styles.altName, { color: colors.text }]}>{alternative.name}</Text>
+                <Text style={[styles.altBrand, { color: colors.subtext }]}>{alternative.brand}</Text>
+              </View>
+            </Pressable>
+          </View>
+        )}
+
         <View style={[styles.section, { backgroundColor: colors.card }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Breakdown</Text>
           <BreakdownBar label="Nutrition" value={product.breakdown.nutrition} textColor={colors.subtext} />
@@ -107,21 +125,6 @@ export default function ResultScreen({ route, navigation }: Props) {
             {product.cons.map((c) => (
               <Text key={c} style={styles.conText}>- {c}</Text>
             ))}
-          </View>
-        )}
-
-        {alternative && (
-          <View style={[styles.section, { backgroundColor: colors.card }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Try this instead</Text>
-            <Pressable style={styles.altRow} onPress={() => openAlternative(alternative)}>
-              <View style={[styles.altScore, { backgroundColor: GRADE_COLOR[alternative.grade] }]}>
-                <Text style={styles.altScoreText}>{alternative.score}</Text>
-              </View>
-              <View style={styles.altInfo}>
-                <Text style={[styles.altName, { color: colors.text }]}>{alternative.name}</Text>
-                <Text style={[styles.altBrand, { color: colors.subtext }]}>{alternative.brand}</Text>
-              </View>
-            </Pressable>
           </View>
         )}
 
@@ -269,6 +272,11 @@ const styles = StyleSheet.create({
     color: '#E53935',
     marginBottom: 6,
     fontWeight: '500',
+  },
+  altHint: {
+    fontSize: 12,
+    marginTop: -6,
+    marginBottom: 12,
   },
   altRow: {
     flexDirection: 'row',
