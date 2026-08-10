@@ -7,11 +7,15 @@ import {
   StreakState,
   UserProfile,
   loadChallenge,
+  loadChallengeHistory,
   loadHistory,
+  loadOnboarded,
   loadProfile,
   loadStreak,
   saveChallenge,
+  saveChallengeHistory,
   saveHistory,
+  saveOnboarded,
   saveProfile,
   saveStreak,
 } from '../storage';
@@ -31,6 +35,10 @@ function yesterdayKey(): string {
   return dateKey(d);
 }
 
+function makeChallengeId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export interface RecordScanResult {
   streakUpdated: boolean;
   challengeCompleted: boolean;
@@ -38,36 +46,48 @@ export interface RecordScanResult {
 
 interface AppDataValue {
   loaded: boolean;
+  onboarded: boolean;
   history: HistoryEntry[];
   streak: StreakState;
   challenge: ChallengeState | null;
+  challengeHistory: ChallengeState[];
   profile: UserProfile;
   recordScan: (product: Product) => Promise<RecordScanResult>;
+  deleteHistoryEntry: (scannedAt: string) => Promise<void>;
   setProfile: (partial: Partial<UserProfile>) => Promise<void>;
-  startChallenge: (target: number) => Promise<void>;
+  startChallenge: (target: number, label?: string) => Promise<void>;
+  completeOnboarding: () => Promise<void>;
+  devCompleteChallenge: () => Promise<void>;
+  devAddChallengeProgress: (amount: number) => Promise<void>;
 }
 
 const AppDataContext = createContext<AppDataValue | null>(null);
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
+  const [onboarded, setOnboarded] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [streak, setStreak] = useState<StreakState>(DEFAULT_STREAK);
   const [challenge, setChallenge] = useState<ChallengeState | null>(null);
+  const [challengeHistory, setChallengeHistory] = useState<ChallengeState[]>([]);
   const [profile, setProfileState] = useState<UserProfile>(DEFAULT_PROFILE);
 
   useEffect(() => {
     (async () => {
-      const [h, s, c, p] = await Promise.all([
+      const [h, s, c, ch, p, ob] = await Promise.all([
         loadHistory(),
         loadStreak(),
         loadChallenge(),
+        loadChallengeHistory(),
         loadProfile(),
+        loadOnboarded(),
       ]);
       setHistory(h);
       setStreak(s);
       setChallenge(c);
+      setChallengeHistory(ch);
       setProfileState(p);
+      setOnboarded(ob);
       setLoaded(true);
     })();
   }, []);
@@ -80,10 +100,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     const today = todayKey();
     const streakUpdated = streak.lastScanDate !== today;
-    let nextStreak = streak;
     if (streakUpdated) {
       const current = streak.lastScanDate === yesterdayKey() ? streak.current + 1 : 1;
-      nextStreak = {
+      const nextStreak = {
         current,
         longest: Math.max(streak.longest, current),
         lastScanDate: today,
@@ -103,9 +122,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       };
       setChallenge(nextChallenge);
       saveChallenge(nextChallenge);
+      if (challengeCompleted) {
+        const nextChallengeHistory = [nextChallenge, ...challengeHistory];
+        setChallengeHistory(nextChallengeHistory);
+        saveChallengeHistory(nextChallengeHistory);
+      }
     }
 
     return { streakUpdated, challengeCompleted };
+  };
+
+  const deleteHistoryEntry = async (scannedAt: string) => {
+    const next = history.filter((h) => h.scannedAt !== scannedAt);
+    setHistory(next);
+    await saveHistory(next);
   };
 
   const setProfile = async (partial: Partial<UserProfile>) => {
@@ -114,8 +144,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     await saveProfile(next);
   };
 
-  const startChallenge = async (target: number) => {
+  const startChallenge = async (target: number, label?: string) => {
     const next: ChallengeState = {
+      id: makeChallengeId(),
+      label: label?.trim() || `Scan ${target} healthy foods`,
       target,
       progress: 0,
       startedAt: new Date().toISOString(),
@@ -125,9 +157,57 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     await saveChallenge(next);
   };
 
+  const completeOnboarding = async () => {
+    setOnboarded(true);
+    await saveOnboarded(true);
+  };
+
+  const devCompleteChallenge = async () => {
+    if (!challenge || challenge.completedAt) return;
+    const completed: ChallengeState = {
+      ...challenge,
+      progress: challenge.target,
+      completedAt: new Date().toISOString(),
+    };
+    setChallenge(completed);
+    await saveChallenge(completed);
+    const nextChallengeHistory = [completed, ...challengeHistory];
+    setChallengeHistory(nextChallengeHistory);
+    await saveChallengeHistory(nextChallengeHistory);
+  };
+
+  const devAddChallengeProgress = async (amount: number) => {
+    if (!challenge || challenge.completedAt) return;
+    const progress = Math.min(challenge.target, challenge.progress + amount);
+    const completedAt = progress >= challenge.target ? new Date().toISOString() : null;
+    const next: ChallengeState = { ...challenge, progress, completedAt };
+    setChallenge(next);
+    await saveChallenge(next);
+    if (completedAt) {
+      const nextChallengeHistory = [next, ...challengeHistory];
+      setChallengeHistory(nextChallengeHistory);
+      await saveChallengeHistory(nextChallengeHistory);
+    }
+  };
+
   const value = useMemo(
-    () => ({ loaded, history, streak, challenge, profile, recordScan, setProfile, startChallenge }),
-    [loaded, history, streak, challenge, profile],
+    () => ({
+      loaded,
+      onboarded,
+      history,
+      streak,
+      challenge,
+      challengeHistory,
+      profile,
+      recordScan,
+      deleteHistoryEntry,
+      setProfile,
+      startChallenge,
+      completeOnboarding,
+      devCompleteChallenge,
+      devAddChallengeProgress,
+    }),
+    [loaded, onboarded, history, streak, challenge, challengeHistory, profile],
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

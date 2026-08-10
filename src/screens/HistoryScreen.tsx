@@ -1,67 +1,120 @@
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Animated, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
+import DismissKeyboardView from '../components/DismissKeyboardView';
+import ScreenHeader from '../components/ScreenHeader';
 import { useAppData } from '../context/AppDataContext';
 import { RootStackParamList } from '../navigation/types';
 import { HistoryEntry } from '../storage';
+import { useTheme } from '../theme';
 import { GRADE_COLOR } from '../types';
 
 export default function HistoryScreen() {
-  const { history } = useAppData();
+  const { history, deleteHistoryEntry } = useAppData();
+  const { colors } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [query, setQuery] = useState('');
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return history;
+    return history.filter((h) => h.product.name.toLowerCase().includes(q));
+  }, [history, query]);
 
   const renderItem = ({ item }: { item: HistoryEntry }) => (
-    <Pressable
-      style={styles.row}
-      onPress={() =>
-        navigation.navigate('Result', {
-          product: item.product,
-          origin: 'history',
-          scannedAt: item.scannedAt,
-        })
-      }
+    <Swipeable
+      renderRightActions={(progress) => {
+        const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [80, 0] });
+        return (
+          <Animated.View style={{ transform: [{ translateX }] }}>
+            <Pressable style={styles.deleteAction} onPress={() => deleteHistoryEntry(item.scannedAt)}>
+              <Text style={styles.deleteActionText}>Delete</Text>
+            </Pressable>
+          </Animated.View>
+        );
+      }}
+      overshootRight={false}
     >
-      <View style={[styles.chip, { backgroundColor: GRADE_COLOR[item.product.grade] }]}>
-        <Text style={styles.chipText}>{item.product.score}</Text>
-      </View>
-      <View style={styles.info}>
-        <Text style={styles.name}>{item.product.name}</Text>
-        <Text style={styles.date}>{new Date(item.scannedAt).toLocaleString()}</Text>
-      </View>
-    </Pressable>
+      <Pressable
+        style={[styles.row, { backgroundColor: colors.card }]}
+        onPress={() =>
+          navigation.navigate('Result', {
+            product: item.product,
+            origin: 'history',
+            scannedAt: item.scannedAt,
+          })
+        }
+      >
+        <View style={[styles.chip, { backgroundColor: GRADE_COLOR[item.product.grade] }]}>
+          <Text style={styles.chipText}>{item.product.score}</Text>
+        </View>
+        <View style={styles.info}>
+          <Text style={[styles.name, { color: colors.text }]}>{item.product.name}</Text>
+          <Text style={[styles.date, { color: colors.subtext }]}>
+            {new Date(item.scannedAt).toLocaleString()}
+          </Text>
+        </View>
+      </Pressable>
+    </Swipeable>
   );
 
   return (
-    <View style={styles.container}>
+    <DismissKeyboardView style={{ backgroundColor: colors.background }}>
+      <ScreenHeader title="History" />
+      <View style={styles.searchWrap}>
+        <TextInput
+          style={[styles.search, { backgroundColor: colors.card, color: colors.text }]}
+          placeholder="Search your scans"
+          placeholderTextColor={colors.placeholder}
+          value={query}
+          onChangeText={setQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
       {history.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>No scans yet — head to the Scanner tab to get started.</Text>
+          <Text style={[styles.emptyText, { color: colors.subtext }]}>
+            No scans yet — head to the Scanner tab to get started.
+          </Text>
+        </View>
+      ) : filtered.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={[styles.emptyText, { color: colors.subtext }]}>No matches for "{query}".</Text>
         </View>
       ) : (
         <FlatList
-          data={history}
+          data={filtered}
           keyExtractor={(item) => `${item.product.barcode}-${item.scannedAt}`}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
         />
       )}
-    </View>
+    </DismissKeyboardView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
+  searchWrap: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  search: {
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 15,
   },
   listContent: {
-    padding: 16,
-    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 12,
     marginBottom: 10,
@@ -85,12 +138,23 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#222',
   },
   date: {
     fontSize: 12,
-    color: '#888',
     marginTop: 2,
+  },
+  deleteAction: {
+    backgroundColor: '#E53935',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  deleteActionText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 13,
   },
   empty: {
     flex: 1,
@@ -99,7 +163,6 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   emptyText: {
-    color: '#888',
     fontSize: 14,
     textAlign: 'center',
   },

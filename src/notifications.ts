@@ -20,7 +20,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return requested.granted;
 }
 
-export async function scheduleDailyReminder(hour: number): Promise<void> {
+export async function scheduleDailyReminder(hour: number, minute: number = 0): Promise<void> {
   if (Platform.OS === 'web') return;
   await cancelDailyReminder();
   await Notifications.scheduleNotificationAsync({
@@ -32,7 +32,7 @@ export async function scheduleDailyReminder(hour: number): Promise<void> {
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
       hour,
-      minute: 0,
+      minute,
     },
   });
 }

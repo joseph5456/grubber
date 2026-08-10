@@ -2,24 +2,26 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { findBetterAlternative } from '../catalog';
+import ChallengeCelebration from '../components/ChallengeCelebration';
 import RewardAnimation from '../components/RewardAnimation';
 import ScoreReveal from '../components/ScoreReveal';
 import { useAppData } from '../context/AppDataContext';
 import { playScanFeedback } from '../feedback';
 import { RootStackParamList } from '../navigation/types';
+import { useTheme } from '../theme';
 import { FLAG_LABELS, GRADE_COLOR, GRADE_LABEL, Product } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Result'>;
 
-function BreakdownBar({ label, value }: { label: string; value: number }) {
+function BreakdownBar({ label, value, textColor }: { label: string; value: number; textColor: string }) {
   const color = value >= 60 ? '#1E8F4E' : value >= 30 ? '#FF9800' : '#E53935';
   return (
     <View style={styles.barRow}>
-      <Text style={styles.barLabel}>{label}</Text>
+      <Text style={[styles.barLabel, { color: textColor }]}>{label}</Text>
       <View style={styles.barTrack}>
         <View style={[styles.barFill, { width: `${value}%`, backgroundColor: color }]} />
       </View>
-      <Text style={styles.barValue}>{value}</Text>
+      <Text style={[styles.barValue, { color: textColor }]}>{value}</Text>
     </View>
   );
 }
@@ -27,9 +29,10 @@ function BreakdownBar({ label, value }: { label: string; value: number }) {
 export default function ResultScreen({ route, navigation }: Props) {
   const { product, origin, scannedAt } = route.params;
   const { profile, recordScan } = useAppData();
+  const { colors } = useTheme();
   const recorded = useRef(false);
   const [streakUpdated, setStreakUpdated] = useState(false);
-  const [challengeCompleted, setChallengeCompleted] = useState(false);
+  const [showChallengeCelebration, setShowChallengeCelebration] = useState(false);
 
   useEffect(() => {
     if (origin === 'history' || recorded.current) return;
@@ -37,7 +40,7 @@ export default function ResultScreen({ route, navigation }: Props) {
     playScanFeedback(product.grade);
     recordScan(product).then((result) => {
       setStreakUpdated(result.streakUpdated);
-      setChallengeCompleted(result.challengeCompleted);
+      if (result.challengeCompleted) setShowChallengeCelebration(true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -55,7 +58,7 @@ export default function ResultScreen({ route, navigation }: Props) {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       {origin !== 'history' && <RewardAnimation grade={product.grade} />}
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.demoBanner}>
@@ -70,9 +73,9 @@ export default function ResultScreen({ route, navigation }: Props) {
           </View>
         )}
 
-        <Text style={styles.brand}>{product.brand}</Text>
-        <Text style={styles.name}>{product.name}</Text>
-        <Text style={styles.barcode}>{product.barcode}</Text>
+        <Text style={[styles.brand, { color: colors.subtext }]}>{product.brand}</Text>
+        <Text style={[styles.name, { color: colors.text }]}>{product.name}</Text>
+        <Text style={[styles.barcode, { color: colors.subtext }]}>{product.barcode}</Text>
 
         <ScoreReveal score={product.score} color={color} label={GRADE_LABEL[product.grade]} />
 
@@ -81,22 +84,17 @@ export default function ResultScreen({ route, navigation }: Props) {
             <Text style={styles.pillText}>🔥 Streak day logged</Text>
           </View>
         )}
-        {challengeCompleted && (
-          <View style={[styles.pill, styles.pillCelebrate]}>
-            <Text style={styles.pillText}>🎉 Challenge complete!</Text>
-          </View>
-        )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Breakdown</Text>
-          <BreakdownBar label="Nutrition" value={product.breakdown.nutrition} />
-          <BreakdownBar label="Additives" value={product.breakdown.additives} />
-          <BreakdownBar label="Organic" value={product.breakdown.organic} />
+        <View style={[styles.section, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Breakdown</Text>
+          <BreakdownBar label="Nutrition" value={product.breakdown.nutrition} textColor={colors.subtext} />
+          <BreakdownBar label="Additives" value={product.breakdown.additives} textColor={colors.subtext} />
+          <BreakdownBar label="Organic" value={product.breakdown.organic} textColor={colors.subtext} />
         </View>
 
         {product.pros.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>What's good</Text>
+          <View style={[styles.section, { backgroundColor: colors.card }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>What's good</Text>
             {product.pros.map((p) => (
               <Text key={p} style={styles.proText}>+ {p}</Text>
             ))}
@@ -104,8 +102,8 @@ export default function ResultScreen({ route, navigation }: Props) {
         )}
 
         {product.cons.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Watch out for</Text>
+          <View style={[styles.section, { backgroundColor: colors.card }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Watch out for</Text>
             {product.cons.map((c) => (
               <Text key={c} style={styles.conText}>- {c}</Text>
             ))}
@@ -113,15 +111,15 @@ export default function ResultScreen({ route, navigation }: Props) {
         )}
 
         {alternative && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Try this instead</Text>
+          <View style={[styles.section, { backgroundColor: colors.card }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Try this instead</Text>
             <Pressable style={styles.altRow} onPress={() => openAlternative(alternative)}>
               <View style={[styles.altScore, { backgroundColor: GRADE_COLOR[alternative.grade] }]}>
                 <Text style={styles.altScoreText}>{alternative.score}</Text>
               </View>
               <View style={styles.altInfo}>
-                <Text style={styles.altName}>{alternative.name}</Text>
-                <Text style={styles.altBrand}>{alternative.brand}</Text>
+                <Text style={[styles.altName, { color: colors.text }]}>{alternative.name}</Text>
+                <Text style={[styles.altBrand, { color: colors.subtext }]}>{alternative.brand}</Text>
               </View>
             </Pressable>
           </View>
@@ -130,7 +128,9 @@ export default function ResultScreen({ route, navigation }: Props) {
         {origin === 'history' ? (
           <>
             {scannedAt && (
-              <Text style={styles.scannedAt}>Scanned {new Date(scannedAt).toLocaleString()}</Text>
+              <Text style={[styles.scannedAt, { color: colors.subtext }]}>
+                Scanned {new Date(scannedAt).toLocaleString()}
+              </Text>
             )}
             <Pressable style={styles.scanButton} onPress={() => navigation.goBack()}>
               <Text style={styles.scanButtonText}>Close</Text>
@@ -142,6 +142,10 @@ export default function ResultScreen({ route, navigation }: Props) {
           </Pressable>
         )}
       </ScrollView>
+
+      {showChallengeCelebration && (
+        <ChallengeCelebration onDismiss={() => setShowChallengeCelebration(false)} />
+      )}
     </View>
   );
 }
@@ -149,11 +153,9 @@ export default function ResultScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
   },
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
   },
   content: {
     padding: 20,
@@ -192,20 +194,17 @@ const styles = StyleSheet.create({
   },
   brand: {
     fontSize: 13,
-    color: '#888',
     fontWeight: '600',
     textTransform: 'uppercase',
   },
   name: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#222',
     textAlign: 'center',
     marginTop: 4,
   },
   barcode: {
     fontSize: 12,
-    color: '#aaa',
     marginTop: 4,
     marginBottom: 20,
   },
@@ -216,9 +215,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     marginTop: 16,
   },
-  pillCelebrate: {
-    backgroundColor: '#1E8F4E',
-  },
   pillText: {
     color: '#fff',
     fontWeight: '700',
@@ -226,7 +222,6 @@ const styles = StyleSheet.create({
   },
   section: {
     width: '100%',
-    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
     marginTop: 16,
@@ -234,7 +229,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#333',
     marginBottom: 12,
     textTransform: 'uppercase',
   },
@@ -246,7 +240,6 @@ const styles = StyleSheet.create({
   barLabel: {
     width: 80,
     fontSize: 13,
-    color: '#555',
   },
   barTrack: {
     flex: 1,
@@ -263,7 +256,6 @@ const styles = StyleSheet.create({
   barValue: {
     width: 28,
     fontSize: 13,
-    color: '#555',
     textAlign: 'right',
   },
   proText: {
@@ -301,16 +293,13 @@ const styles = StyleSheet.create({
   altName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#222',
   },
   altBrand: {
     fontSize: 12,
-    color: '#888',
     marginTop: 2,
   },
   scannedAt: {
     fontSize: 12,
-    color: '#999',
     marginTop: 16,
   },
   scanButton: {

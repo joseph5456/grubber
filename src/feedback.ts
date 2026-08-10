@@ -3,6 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { Grade } from './types';
 
 let chimePlayer: AudioPlayer | null = null;
+let fanfarePlayer: AudioPlayer | null = null;
 
 function getChimePlayer(): AudioPlayer {
   if (!chimePlayer) {
@@ -10,6 +11,14 @@ function getChimePlayer(): AudioPlayer {
     chimePlayer = createAudioPlayer(require('../assets/sounds/chime.wav'));
   }
   return chimePlayer;
+}
+
+function getFanfarePlayer(): AudioPlayer {
+  if (!fanfarePlayer) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    fanfarePlayer = createAudioPlayer(require('../assets/sounds/fanfare.wav'));
+  }
+  return fanfarePlayer;
 }
 
 /** Fires on every scan — the reward is for the act of scanning, not for a good score. */
@@ -28,6 +37,26 @@ export async function playScanFeedback(grade: Grade): Promise<void> {
         ? Haptics.NotificationFeedbackType.Success
         : Haptics.NotificationFeedbackType.Warning;
     await Haptics.notificationAsync(feedbackType);
+  } catch {
+    // Haptics aren't available on web.
+  }
+}
+
+/** A bigger, distinct reward for finishing a challenge — separate from the per-scan chime. */
+export async function playChallengeFanfare(): Promise<void> {
+  try {
+    const player = getFanfarePlayer();
+    player.seekTo(0);
+    player.play();
+  } catch {
+    // Audio isn't available on every platform/browser.
+  }
+
+  try {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setTimeout(() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+    }, 180);
   } catch {
     // Haptics aren't available on web.
   }
