@@ -1,7 +1,7 @@
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ActivityIndicator, LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import { RootStackParamList } from '../navigation/types';
 import { lookupBarcode } from '../openFoodFacts';
@@ -14,6 +14,9 @@ export default function ScannerScreen() {
   const isFocused = useIsFocused();
   const [permission, requestPermission] = useCameraPermissions();
   const [locked, setLocked] = useState(false);
+  // The camera reports the same barcode many times per second, faster than `locked` re-renders,
+  // so this ref is the real guard against firing several lookups for one scan.
+  const scanInFlight = useRef(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ title: string; body: string } | null>(null);
   const [layout, setLayout] = useState({ width: 0, height: 0 });
@@ -39,8 +42,9 @@ export default function ScannerScreen() {
   };
 
   const handleScan = async (result: BarcodeScanningResult) => {
-    if (locked) return;
+    if (scanInFlight.current) return;
     if (!isWithinFrame(result.bounds)) return;
+    scanInFlight.current = true;
     setLocked(true);
     setLoading(true);
     try {
@@ -48,14 +52,18 @@ export default function ScannerScreen() {
       setLoading(false);
       if (lookup.status === 'found') {
         navigation.navigate('Result', { product: lookup.product, origin: 'scan' });
-        setTimeout(() => setLocked(false), 1000);
+        setTimeout(() => {
+          scanInFlight.current = false;
+          setLocked(false);
+        }, 1000);
       } else {
         setMessage({
           title: 'Product not found',
           body: `Barcode ${result.data} isn't in the Open Food Facts database yet.`,
         });
       }
-    } catch {
+    } catch (err) {
+      console.warn('Barcode lookup failed', err);
       setLoading(false);
       setMessage({
         title: "Couldn't look up product",
@@ -66,6 +74,7 @@ export default function ScannerScreen() {
 
   const dismissMessage = () => {
     setMessage(null);
+    scanInFlight.current = false;
     setLocked(false);
   };
 
