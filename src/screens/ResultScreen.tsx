@@ -1,13 +1,13 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { findBetterAlternative } from '../catalog';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ChallengeCelebration from '../components/ChallengeCelebration';
 import RewardAnimation from '../components/RewardAnimation';
 import ScoreReveal from '../components/ScoreReveal';
 import { useAppData } from '../context/AppDataContext';
 import { playScanFeedback } from '../feedback';
 import { RootStackParamList } from '../navigation/types';
+import { findBetterAlternative } from '../openFoodFacts';
 import { useTheme } from '../theme';
 import { FLAG_LABELS, GRADE_COLOR, GRADE_LABEL, Nutrition, Product, ProductDetails } from '../types';
 
@@ -121,12 +121,22 @@ export default function ResultScreen({ route, navigation }: Props) {
   const isReal = product.source === 'openfoodfacts';
   const details = product.details;
 
-  const alternative = useMemo(() => {
-    // The catalog is simulated, so only suggest from it for simulated products.
-    if (isReal) return undefined;
-    if (product.grade !== 'poor' && product.grade !== 'bad') return undefined;
-    return findBetterAlternative(product.category, product.barcode);
-  }, [isReal, product.category, product.barcode, product.grade]);
+  const wantsAlternative = isReal && (product.grade === 'poor' || product.grade === 'bad');
+  const [alternative, setAlternative] = useState<Product | undefined>();
+  const [alternativeLoading, setAlternativeLoading] = useState(wantsAlternative);
+
+  useEffect(() => {
+    if (!wantsAlternative) return;
+    let cancelled = false;
+    findBetterAlternative(product)
+      .then((alt) => !cancelled && setAlternative(alt))
+      .catch(() => undefined)
+      .finally(() => !cancelled && setAlternativeLoading(false));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product.barcode]);
 
   const openAlternative = (alt: Product) => {
     navigation.push('Result', { product: alt, origin: 'search' });
@@ -138,7 +148,9 @@ export default function ResultScreen({ route, navigation }: Props) {
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         {!isReal && (
           <View style={styles.demoBanner}>
-            <Text style={styles.demoBannerText}>DEMO RESULT — simulated for demonstration only</Text>
+            <Text style={styles.demoBannerText}>
+              Saved by an older version of the app — this data was simulated, not real
+            </Text>
           </View>
         )}
 
@@ -185,6 +197,15 @@ export default function ResultScreen({ route, navigation }: Props) {
           </View>
         )}
 
+        {alternativeLoading && (
+          <View style={[styles.section, styles.altLoading, { backgroundColor: colors.card }]}>
+            <ActivityIndicator />
+            <Text style={[styles.altHint, styles.altLoadingText, { color: colors.subtext }]}>
+              Finding a better-rated alternative…
+            </Text>
+          </View>
+        )}
+
         {alternative && (
           <View style={[styles.section, { backgroundColor: colors.card }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Recommended alternative</Text>
@@ -197,7 +218,10 @@ export default function ResultScreen({ route, navigation }: Props) {
               </View>
               <View style={styles.altInfo}>
                 <Text style={[styles.altName, { color: colors.text }]}>{alternative.name}</Text>
-                <Text style={[styles.altBrand, { color: colors.subtext }]}>{alternative.brand}</Text>
+                <Text style={[styles.altBrand, { color: colors.subtext }]}>
+                  {alternative.brand}
+                  {alternative.details?.nutriScore ? ` · Nutri-Score ${alternative.details.nutriScore.toUpperCase()}` : ''}
+                </Text>
               </View>
             </Pressable>
           </View>
@@ -421,6 +445,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: -6,
     marginBottom: 12,
+  },
+  altLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  altLoadingText: {
+    marginTop: 0,
+    marginBottom: 0,
+    marginLeft: 10,
   },
   altRow: {
     flexDirection: 'row',
