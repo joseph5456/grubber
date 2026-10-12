@@ -45,7 +45,7 @@ function pick<T>(rng: () => number, items: T[]): T {
   return items[Math.floor(rng() * items.length) % items.length];
 }
 
-function scoreToGrade(score: number): Grade {
+export function scoreToGrade(score: number): Grade {
   if (score >= 75) return 'excellent';
   if (score >= 50) return 'good';
   if (score >= 25) return 'poor';
@@ -97,5 +97,6 @@ export function generateProduct(
     pros,
     cons,
     tags,
+    source: 'simulated',
   };
 }

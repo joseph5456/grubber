@@ -24,6 +24,40 @@ export interface Product {
   pros: string[];
   cons: string[];
   tags: FlagTag[];
+  /** 'openfoodfacts' for real looked-up products; absent/'simulated' for generated demo products. */
+  source?: ProductSource;
+  details?: ProductDetails;
+}
+
+export type ProductSource = 'openfoodfacts' | 'simulated';
+
+/** Per-100g (or per-100ml) values; any field may be missing if the database doesn't have it. */
+export interface Nutrition {
+  energyKcal?: number;
+  fat?: number;
+  saturatedFat?: number;
+  carbohydrates?: number;
+  sugars?: number;
+  fiber?: number;
+  proteins?: number;
+  salt?: number;
+  sodium?: number;
+}
+
+export interface ProductDetails {
+  imageUrl?: string;
+  quantity?: string;
+  servingSize?: string;
+  nutritionPer100g: Nutrition;
+  nutritionPerServing?: Nutrition;
+  /** a–e, or undefined when not computed for this product. */
+  nutriScore?: 'a' | 'b' | 'c' | 'd' | 'e';
+  /** 1 (unprocessed) – 4 (ultra-processed). */
+  novaGroup?: 1 | 2 | 3 | 4;
+  ingredientsText?: string;
+  allergens: string[];
+  labels: string[];
+  additives: string[];
 }
 
 export const GRADE_COLOR: Record<Grade, string> = {

@@ -2,9 +2,9 @@ import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import { useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import { RootStackParamList } from '../navigation/types';
-import { generateProduct } from '../productGenerator';
+import { lookupBarcode } from '../openFoodFacts';
 
 const FRAME_WIDTH = 260;
 const FRAME_HEIGHT = 160;
@@ -14,6 +14,8 @@ export default function ScannerScreen() {
   const isFocused = useIsFocused();
   const [permission, requestPermission] = useCameraPermissions();
   const [locked, setLocked] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{ title: string; body: string } | null>(null);
   const [layout, setLayout] = useState({ width: 0, height: 0 });
 
   const onLayout = (e: LayoutChangeEvent) => {
@@ -36,13 +38,35 @@ export default function ScannerScreen() {
     );
   };
 
-  const handleScan = (result: BarcodeScanningResult) => {
+  const handleScan = async (result: BarcodeScanningResult) => {
     if (locked) return;
     if (!isWithinFrame(result.bounds)) return;
     setLocked(true);
-    const product = generateProduct(result.data);
-    navigation.navigate('Result', { product, origin: 'scan' });
-    setTimeout(() => setLocked(false), 1000);
+    setLoading(true);
+    try {
+      const lookup = await lookupBarcode(result.data);
+      setLoading(false);
+      if (lookup.status === 'found') {
+        navigation.navigate('Result', { product: lookup.product, origin: 'scan' });
+        setTimeout(() => setLocked(false), 1000);
+      } else {
+        setMessage({
+          title: 'Product not found',
+          body: `Barcode ${result.data} isn't in the Open Food Facts database yet.`,
+        });
+      }
+    } catch {
+      setLoading(false);
+      setMessage({
+        title: "Couldn't look up product",
+        body: 'Check your internet connection and try again.',
+      });
+    }
+  };
+
+  const dismissMessage = () => {
+    setMessage(null);
+    setLocked(false);
   };
 
   if (!permission) {
@@ -54,7 +78,7 @@ export default function ScannerScreen() {
       <View style={styles.container}>
         <Text style={styles.permissionTitle}>Camera access needed</Text>
         <Text style={styles.permissionBody}>
-          This demo scans product barcodes using your camera.
+          Scan food barcodes with your camera to see their nutrition and ingredients.
         </Text>
         <Pressable style={styles.button} onPress={requestPermission}>
           <Text style={styles.buttonText}>Grant camera access</Text>
@@ -71,7 +95,7 @@ export default function ScannerScreen() {
           facing="back"
           onBarcodeScanned={locked ? undefined : handleScan}
           barcodeScannerSettings={{
-            barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'qr', 'code128'],
+            barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'],
           }}
         />
       )}
@@ -79,8 +103,23 @@ export default function ScannerScreen() {
         <View style={styles.frame} />
         <Text style={styles.hint}>Point your camera at a barcode</Text>
       </View>
+      {loading && (
+        <View style={styles.statusCard}>
+          <ActivityIndicator color="#fff" />
+          <Text style={styles.statusTitle}>Looking up product…</Text>
+        </View>
+      )}
+      {message && (
+        <View style={styles.statusCard}>
+          <Text style={styles.statusTitle}>{message.title}</Text>
+          <Text style={styles.statusBody}>{message.body}</Text>
+          <Pressable style={[styles.button, styles.statusButton]} onPress={dismissMessage}>
+            <Text style={styles.buttonText}>Scan again</Text>
+          </Pressable>
+        </View>
+      )}
       <View style={styles.banner} pointerEvents="none">
-        <Text style={styles.bannerText}>DEMO — scores are simulated, not real analysis</Text>
+        <Text style={styles.bannerText}>Product data from Open Food Facts</Text>
       </View>
     </View>
   );
@@ -119,7 +158,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -137,6 +176,31 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowRadius: 4,
+  },
+  statusCard: {
+    position: 'absolute',
+    left: 32,
+    right: 32,
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    borderRadius: 16,
+    padding: 20,
+  },
+  statusTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  statusBody: {
+    color: '#ccc',
+    fontSize: 13,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  statusButton: {
+    marginTop: 16,
   },
   banner: {
     position: 'absolute',

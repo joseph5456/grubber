@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { findBetterAlternative } from '../catalog';
 import ChallengeCelebration from '../components/ChallengeCelebration';
 import RewardAnimation from '../components/RewardAnimation';
@@ -9,7 +9,7 @@ import { useAppData } from '../context/AppDataContext';
 import { playScanFeedback } from '../feedback';
 import { RootStackParamList } from '../navigation/types';
 import { useTheme } from '../theme';
-import { FLAG_LABELS, GRADE_COLOR, GRADE_LABEL, Product } from '../types';
+import { FLAG_LABELS, GRADE_COLOR, GRADE_LABEL, Nutrition, Product, ProductDetails } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Result'>;
 
@@ -22,6 +22,76 @@ function BreakdownBar({ label, value, textColor }: { label: string; value: numbe
         <View style={[styles.barFill, { width: `${value}%`, backgroundColor: color }]} />
       </View>
       <Text style={[styles.barValue, { color: textColor }]}>{value}</Text>
+    </View>
+  );
+}
+
+const NUTRISCORE_COLOR: Record<NonNullable<ProductDetails['nutriScore']>, string> = {
+  a: '#038141', b: '#85BB2F', c: '#FECB02', d: '#EE8100', e: '#E63E11',
+};
+const NOVA_LABEL: Record<NonNullable<ProductDetails['novaGroup']>, string> = {
+  1: 'Unprocessed', 2: 'Processed ingredient', 3: 'Processed', 4: 'Ultra-processed',
+};
+
+const NUTRITION_ROWS: { key: keyof Nutrition; label: string; unit: string; indent?: boolean }[] = [
+  { key: 'energyKcal', label: 'Calories', unit: 'kcal' },
+  { key: 'fat', label: 'Fat', unit: 'g' },
+  { key: 'saturatedFat', label: 'Saturated fat', unit: 'g', indent: true },
+  { key: 'carbohydrates', label: 'Carbohydrates', unit: 'g' },
+  { key: 'sugars', label: 'Sugars', unit: 'g', indent: true },
+  { key: 'fiber', label: 'Fiber', unit: 'g' },
+  { key: 'proteins', label: 'Protein', unit: 'g' },
+  { key: 'salt', label: 'Salt', unit: 'g' },
+  { key: 'sodium', label: 'Sodium', unit: 'mg' },
+];
+
+function formatNutrient(value: number | undefined, key: keyof Nutrition): string {
+  if (value === undefined) return '—';
+  if (key === 'sodium') return `${Math.round(value * 1000)} mg`;
+  if (key === 'energyKcal') return `${Math.round(value)} kcal`;
+  return `${Math.round(value * 10) / 10} g`;
+}
+
+function NutritionTable({ details, textColor, subColor }: { details: ProductDetails; textColor: string; subColor: string }) {
+  const perServing = details.nutritionPerServing;
+  const rows = NUTRITION_ROWS.filter(
+    (r) => details.nutritionPer100g[r.key] !== undefined || perServing?.[r.key] !== undefined,
+  );
+  if (rows.length === 0) {
+    return <Text style={[styles.bodyText, { color: subColor }]}>No nutrition data available for this product.</Text>;
+  }
+  return (
+    <View>
+      <View style={styles.nutRow}>
+        <Text style={[styles.nutLabel, styles.nutHeader, { color: subColor }]} />
+        <Text style={[styles.nutValue, styles.nutHeader, { color: subColor }]}>Per 100g</Text>
+        {perServing && (
+          <Text style={[styles.nutValue, styles.nutHeader, { color: subColor }]} numberOfLines={2}>
+            Per serving{details.servingSize ? `\n(${details.servingSize})` : ''}
+          </Text>
+        )}
+      </View>
+      {rows.map((r) => (
+        <View key={r.key} style={styles.nutRow}>
+          <Text style={[styles.nutLabel, r.indent && styles.nutIndent, { color: textColor }]}>{r.label}</Text>
+          <Text style={[styles.nutValue, { color: textColor }]}>{formatNutrient(details.nutritionPer100g[r.key], r.key)}</Text>
+          {perServing && (
+            <Text style={[styles.nutValue, { color: textColor }]}>{formatNutrient(perServing[r.key], r.key)}</Text>
+          )}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function ChipList({ items, color }: { items: string[]; color: string }) {
+  return (
+    <View style={styles.chipList}>
+      {items.map((item) => (
+        <View key={item} style={[styles.chip, { borderColor: color }]}>
+          <Text style={[styles.chipText, { color }]}>{item}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -48,10 +118,15 @@ export default function ResultScreen({ route, navigation }: Props) {
   const color = GRADE_COLOR[product.grade];
   const matchedFlags = product.tags.filter((tag) => profile.avoidedTags.includes(tag));
 
+  const isReal = product.source === 'openfoodfacts';
+  const details = product.details;
+
   const alternative = useMemo(() => {
+    // The catalog is simulated, so only suggest from it for simulated products.
+    if (isReal) return undefined;
     if (product.grade !== 'poor' && product.grade !== 'bad') return undefined;
     return findBetterAlternative(product.category, product.barcode);
-  }, [product.category, product.barcode, product.grade]);
+  }, [isReal, product.category, product.barcode, product.grade]);
 
   const openAlternative = (alt: Product) => {
     navigation.push('Result', { product: alt, origin: 'search' });
@@ -61,9 +136,11 @@ export default function ResultScreen({ route, navigation }: Props) {
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       {origin !== 'history' && <RewardAnimation grade={product.grade} />}
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <View style={styles.demoBanner}>
-          <Text style={styles.demoBannerText}>DEMO RESULT — simulated for demonstration only</Text>
-        </View>
+        {!isReal && (
+          <View style={styles.demoBanner}>
+            <Text style={styles.demoBannerText}>DEMO RESULT — simulated for demonstration only</Text>
+          </View>
+        )}
 
         {matchedFlags.length > 0 && (
           <View style={styles.flagBanner}>
@@ -75,13 +152,36 @@ export default function ResultScreen({ route, navigation }: Props) {
 
         <Text style={[styles.brand, { color: colors.subtext }]}>{product.brand}</Text>
         <Text style={[styles.name, { color: colors.text }]}>{product.name}</Text>
-        <Text style={[styles.barcode, { color: colors.subtext }]}>{product.barcode}</Text>
+        {details?.imageUrl && (
+          <Image source={{ uri: details.imageUrl }} style={styles.productImage} resizeMode="contain" />
+        )}
+        <Text style={[styles.barcode, { color: colors.subtext }]}>
+          {product.barcode}
+          {details?.quantity ? ` · ${details.quantity}` : ''}
+        </Text>
 
         <ScoreReveal score={product.score} color={color} label={GRADE_LABEL[product.grade]} />
 
         {streakUpdated && (
           <View style={styles.pill}>
             <Text style={styles.pillText}>🔥 Streak day logged</Text>
+          </View>
+        )}
+
+        {details && (details.nutriScore || details.novaGroup) && (
+          <View style={styles.badgeRow}>
+            {details.nutriScore && (
+              <View style={[styles.infoBadge, { backgroundColor: NUTRISCORE_COLOR[details.nutriScore] }]}>
+                <Text style={styles.infoBadgeText}>Nutri-Score {details.nutriScore.toUpperCase()}</Text>
+              </View>
+            )}
+            {details.novaGroup && (
+              <View style={[styles.infoBadge, { backgroundColor: details.novaGroup === 4 ? '#E53935' : '#555' }]}>
+                <Text style={styles.infoBadgeText}>
+                  NOVA {details.novaGroup} · {NOVA_LABEL[details.novaGroup]}
+                </Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -126,6 +226,50 @@ export default function ResultScreen({ route, navigation }: Props) {
               <Text key={c} style={styles.conText}>- {c}</Text>
             ))}
           </View>
+        )}
+
+        {details && (
+          <>
+            <View style={[styles.section, { backgroundColor: colors.card }]}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Nutrition facts</Text>
+              <NutritionTable details={details} textColor={colors.text} subColor={colors.subtext} />
+            </View>
+
+            <View style={[styles.section, { backgroundColor: colors.card }]}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Ingredients</Text>
+              <Text style={[styles.bodyText, { color: colors.text }]}>
+                {details.ingredientsText || 'No ingredient list available for this product.'}
+              </Text>
+            </View>
+
+            {details.allergens.length > 0 && (
+              <View style={[styles.section, { backgroundColor: colors.card }]}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Allergens</Text>
+                <ChipList items={details.allergens} color="#E53935" />
+              </View>
+            )}
+
+            {details.additives.length > 0 && (
+              <View style={[styles.section, { backgroundColor: colors.card }]}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Additives</Text>
+                <ChipList items={details.additives} color="#FF9800" />
+              </View>
+            )}
+
+            {details.labels.length > 0 && (
+              <View style={[styles.section, { backgroundColor: colors.card }]}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Labels</Text>
+                <ChipList items={details.labels} color="#1E8F4E" />
+              </View>
+            )}
+          </>
+        )}
+
+        {isReal && (
+          <Text style={[styles.attribution, { color: colors.subtext }]}>
+            Data from Open Food Facts (openfoodfacts.org), a community database — it may be incomplete.
+            Score is this app's own estimate.
+          </Text>
         )}
 
         {origin === 'history' ? (
@@ -305,6 +449,79 @@ const styles = StyleSheet.create({
   altBrand: {
     fontSize: 12,
     marginTop: 2,
+  },
+  productImage: {
+    width: 140,
+    height: 140,
+    marginTop: 12,
+    borderRadius: 8,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginTop: 16,
+    gap: 8,
+  },
+  infoBadge: {
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  infoBadgeText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  nutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#ccc',
+  },
+  nutHeader: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  nutLabel: {
+    flex: 1.4,
+    fontSize: 14,
+  },
+  nutIndent: {
+    paddingLeft: 14,
+    fontSize: 13,
+  },
+  nutValue: {
+    flex: 1,
+    fontSize: 14,
+    textAlign: 'right',
+  },
+  bodyText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  chipList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  attribution: {
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 16,
+    paddingHorizontal: 12,
   },
   scannedAt: {
     fontSize: 12,
