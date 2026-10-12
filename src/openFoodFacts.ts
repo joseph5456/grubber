@@ -1,7 +1,7 @@
-import { scoreToGrade } from './productGenerator';
-import { FlagTag, Nutrition, Product, ProductDetails } from './types';
+import { FlagTag, Grade, Nutrition, Product, ProductDetails } from './types';
 
-const API_BASE = 'https://world.openfoodfacts.org/api/v2/product';
+const API_BASE = 'https://world.openfoodfacts.org/api/v2';
+const SEARCH_BASE = 'https://search.openfoodfacts.org/search';
 const USER_AGENT = 'my-app/1.0 (https://github.com/joseph5456/my-app)';
 const TIMEOUT_MS = 10000;
 
@@ -27,12 +27,14 @@ const FIELDS = [
   'additives_tags',
 ].join(',');
 
+const SEARCH_FIELDS = 'code,product_name,brands,quantity,nutriscore_grade,image_front_small_url';
+
 interface OffProduct {
   code?: string;
   product_name?: string;
   product_name_en?: string;
   generic_name?: string;
-  brands?: string;
+  brands?: string | string[];
   categories_tags?: string[];
   quantity?: string;
   serving_size?: string;
@@ -53,16 +55,83 @@ type NutrientLevelKey = 'fat' | 'saturated-fat' | 'sugars' | 'salt';
 
 export type LookupResult = { status: 'found'; product: Product } | { status: 'not_found' };
 
+/** Lightweight search hit; call `lookupBarcode(hit.code)` for the full product. */
+export interface SearchHit {
+  code: string;
+  name: string;
+  brand?: string;
+  quantity?: string;
+  nutriScore?: ProductDetails['nutriScore'];
+  imageUrl?: string;
+}
+
+export function scoreToGrade(score: number): Grade {
+  if (score >= 75) return 'excellent';
+  if (score >= 50) return 'good';
+  if (score >= 25) return 'poor';
+  return 'bad';
+}
+
 /**
  * Looks a barcode up in Open Food Facts. Resolves `not_found` when the database has no entry;
  * rejects on network/timeout errors so the caller can tell the two apart.
  */
 export async function lookupBarcode(barcode: string): Promise<LookupResult> {
   for (const code of candidateCodes(barcode)) {
-    const off = await fetchProduct(code);
-    if (off) return { status: 'found', product: toProduct(code, off) };
+    const json = await getJson(`${API_BASE}/product/${encodeURIComponent(code)}.json?fields=${FIELDS}`);
+    if (json?.status === 1 && json.product) {
+      return { status: 'found', product: toProduct(code, json.product as OffProduct) };
+    }
   }
   return { status: 'not_found' };
+}
+
+/**
+ * Full-text product search, limited to the device's country when we can tell what it is
+ * (falls back to worldwide if that returns nothing).
+ */
+export async function searchProducts(query: string, signal?: AbortSignal): Promise<SearchHit[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const country = deviceCountryTag();
+  const run = async (filter: string) => {
+    const params = `q=${encodeURIComponent(q + filter)}&page_size=30&fields=${SEARCH_FIELDS}`;
+    const json = await getJson(`${SEARCH_BASE}?${params}`, signal);
+    return toSearchHits(json?.hits ?? []);
+  };
+  if (country) {
+    const local = await run(` countries_tags:"${country}"`);
+    if (local.length) return local;
+  }
+  return run('');
+}
+
+/**
+ * Best-scoring popular product in the same category (and country, if known) that beats
+ * `product` by a meaningful margin. Undefined when nothing better is found.
+ */
+export async function findBetterAlternative(product: Product): Promise<Product | undefined> {
+  const category = product.details?.categoryTag;
+  if (!category) return undefined;
+  const country = deviceCountryTag();
+  const run = async (countryFilter: string) => {
+    const q = `categories_tags:"${category}" nutriscore_grade:(a OR b OR c)${countryFilter}`;
+    const params = `q=${encodeURIComponent(q)}&sort_by=-popularity_key&page_size=40&fields=${FIELDS}`;
+    const json = await getJson(`${SEARCH_BASE}?${params}`);
+    return ((json?.hits ?? []) as OffProduct[])
+      .filter((p) => p.code && p.code !== product.barcode && (p.product_name || p.product_name_en))
+      .map((p) => toProduct(p.code!, p))
+      .filter((p) => p.score >= product.score + 10);
+  };
+  let candidates = country ? await run(` countries_tags:"${country}"`) : [];
+  if (!candidates.length) candidates = await run('');
+  // Search results omit some fields (additives, ingredient text), so their scores run optimistic —
+  // confirm the top few against the full record before recommending one.
+  for (const candidate of candidates.sort((a, b) => b.score - a.score).slice(0, 3)) {
+    const full = await lookupBarcode(candidate.barcode).catch(() => undefined);
+    if (full?.status === 'found' && full.product.score >= product.score + 10) return full.product;
+  }
+  return undefined;
 }
 
 /** UPC-A (12 digits) and EAN-13 with a leading 0 are the same product; scanners report either. */
@@ -73,21 +142,64 @@ function candidateCodes(barcode: string): string[] {
   return [code];
 }
 
-async function fetchProduct(code: string): Promise<OffProduct | null> {
+/** GET + parse JSON with a timeout. Resolves null on 404; rejects on other failures. */
+async function getJson(url: string, signal?: AbortSignal): Promise<any> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const onAbort = () => controller.abort();
+  signal?.addEventListener('abort', onAbort);
   try {
-    const res = await fetch(`${API_BASE}/${encodeURIComponent(code)}.json?fields=${FIELDS}`, {
+    const res = await fetch(url, {
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
       signal: controller.signal,
     });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`Open Food Facts returned ${res.status}`);
-    const json = await res.json();
-    if (json.status !== 1 || !json.product) return null;
-    return json.product as OffProduct;
+    return await res.json();
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+  }
+}
+
+function toSearchHits(hits: any[]): SearchHit[] {
+  const seen = new Set<string>();
+  const out: SearchHit[] = [];
+  for (const h of hits) {
+    const name = typeof h.product_name === 'string' ? h.product_name.trim() : '';
+    if (!h.code || !name || seen.has(h.code)) continue;
+    seen.add(h.code);
+    const brands: string[] = Array.isArray(h.brands) ? h.brands : typeof h.brands === 'string' ? h.brands.split(',') : [];
+    const grade = typeof h.nutriscore_grade === 'string' ? h.nutriscore_grade.toLowerCase() : '';
+    out.push({
+      code: h.code,
+      name,
+      brand: brands[0]?.trim() || undefined,
+      quantity: h.quantity || undefined,
+      nutriScore: 'abcde'.includes(grade) && grade.length === 1 ? (grade as SearchHit['nutriScore']) : undefined,
+      imageUrl: h.image_front_small_url || undefined,
+    });
+  }
+  return out;
+}
+
+/** Open Food Facts country tags for common device regions (unlisted regions search worldwide). */
+const REGION_COUNTRY_TAG: Record<string, string> = {
+  US: 'en:united-states', CA: 'en:canada', GB: 'en:united-kingdom', IE: 'en:ireland',
+  AU: 'en:australia', NZ: 'en:new-zealand', FR: 'en:france', DE: 'en:germany', ES: 'en:spain',
+  IT: 'en:italy', NL: 'en:netherlands', BE: 'en:belgium', CH: 'en:switzerland', AT: 'en:austria',
+  PT: 'en:portugal', SE: 'en:sweden', NO: 'en:norway', DK: 'en:denmark', FI: 'en:finland',
+  PL: 'en:poland', MX: 'en:mexico', BR: 'en:brazil', IN: 'en:india', JP: 'en:japan',
+  SG: 'en:singapore', PH: 'en:philippines', VN: 'en:vietnam', ZA: 'en:south-africa',
+};
+
+function deviceCountryTag(): string | undefined {
+  try {
+    const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+    const region = locale.split(/[-_]/).find((part, i) => i > 0 && /^[A-Z]{2}$/.test(part));
+    return region ? REGION_COUNTRY_TAG[region] : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -245,7 +357,7 @@ function toProduct(code: string, off: OffProduct): Product {
   return {
     barcode: off.code || code,
     name: off.product_name || off.product_name_en || off.generic_name || 'Unnamed product',
-    brand: off.brands?.split(',')[0]?.trim() || 'Unknown brand',
+    brand: (Array.isArray(off.brands) ? off.brands[0] : off.brands?.split(',')[0])?.trim() || 'Unknown brand',
     category: category ? prettyTag(category) : 'Food',
     score,
     grade: scoreToGrade(score),
@@ -256,6 +368,7 @@ function toProduct(code: string, off: OffProduct): Product {
     source: 'openfoodfacts',
     details: {
       imageUrl: off.image_front_url,
+      categoryTag: category,
       quantity: off.quantity || undefined,
       servingSize: off.serving_size || undefined,
       nutritionPer100g: per100g,

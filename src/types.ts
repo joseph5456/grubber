@@ -24,7 +24,7 @@ export interface Product {
   pros: string[];
   cons: string[];
   tags: FlagTag[];
-  /** 'openfoodfacts' for real looked-up products; absent/'simulated' for generated demo products. */
+  /** 'openfoodfacts' for looked-up products; absent/'simulated' for demo products saved by older versions. */
   source?: ProductSource;
   details?: ProductDetails;
 }
@@ -46,6 +46,8 @@ export interface Nutrition {
 
 export interface ProductDetails {
   imageUrl?: string;
+  /** Most specific Open Food Facts category tag (e.g. "en:greek-style-yogurts"), for alternatives. */
+  categoryTag?: string;
   quantity?: string;
   servingSize?: string;
   nutritionPer100g: Nutrition;
