@@ -5,6 +5,7 @@ import {
   NativeSyntheticEvent,
   Pressable,
   ScrollView,
+  ScrollViewInstance,
   StyleSheet,
   Text,
   View,
@@ -43,7 +44,7 @@ const SLIDES = [
 export default function OnboardingScreen({ onDone }: Props) {
   const { colors } = useTheme();
   const [index, setIndex] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const isLast = index === SLIDES.length - 1;
 
   const goTo = (i: number) => {

@@ -1,8 +1,9 @@
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useMemo, useState } from 'react';
-import { Animated, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import Animated, { interpolate, SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import DismissKeyboardView from '../components/DismissKeyboardView';
 import ScreenHeader from '../components/ScreenHeader';
 import { useAppData } from '../context/AppDataContext';
@@ -10,6 +11,19 @@ import { RootStackParamList } from '../navigation/types';
 import { HistoryEntry } from '../storage';
 import { useTheme } from '../theme';
 import { GRADE_COLOR } from '../types';
+
+function DeleteAction({ progress, onPress }: { progress: SharedValue<number>; onPress: () => void }) {
+  const slideIn = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(progress.value, [0, 1], [80, 0]) }],
+  }));
+  return (
+    <Animated.View style={slideIn}>
+      <Pressable style={styles.deleteAction} onPress={onPress}>
+        <Text style={styles.deleteActionIcon}>🗑️</Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
 
 export default function HistoryScreen() {
   const { history, deleteHistoryEntry } = useAppData();
@@ -24,17 +38,10 @@ export default function HistoryScreen() {
   }, [history, query]);
 
   const renderItem = ({ item }: { item: HistoryEntry }) => (
-    <Swipeable
-      renderRightActions={(progress) => {
-        const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [80, 0] });
-        return (
-          <Animated.View style={{ transform: [{ translateX }] }}>
-            <Pressable style={styles.deleteAction} onPress={() => deleteHistoryEntry(item.scannedAt)}>
-              <Text style={styles.deleteActionIcon}>🗑️</Text>
-            </Pressable>
-          </Animated.View>
-        );
-      }}
+    <ReanimatedSwipeable
+      renderRightActions={(progress) => (
+        <DeleteAction progress={progress} onPress={() => deleteHistoryEntry(item.scannedAt)} />
+      )}
       overshootRight={false}
     >
       <Pressable
@@ -57,7 +64,7 @@ export default function HistoryScreen() {
           </Text>
         </View>
       </Pressable>
-    </Swipeable>
+    </ReanimatedSwipeable>
   );
 
   return (
