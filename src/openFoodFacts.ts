@@ -2,7 +2,7 @@ import { FlagTag, Grade, Nutrition, Product, ProductDetails } from './types';
 
 const API_BASE = 'https://world.openfoodfacts.org/api/v2';
 const SEARCH_BASE = 'https://search.openfoodfacts.org/search';
-const USER_AGENT = 'my-app/1.0 (https://github.com/joseph5456/my-app)';
+const USER_AGENT = 'Grubber/1.0 (https://github.com/joseph5456/my-app)';
 const TIMEOUT_MS = 10000;
 
 const FIELDS = [

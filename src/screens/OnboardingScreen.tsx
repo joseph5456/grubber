@@ -21,7 +21,7 @@ const { width } = Dimensions.get('window');
 const SLIDES = [
   {
     emoji: '📷',
-    title: 'Scan any food',
+    title: 'Welcome to Grubber',
     body: "Point your camera at a barcode and get an instant 0-100 health score — no typing, no searching required.",
   },
   {
